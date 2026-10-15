@@ -1,66 +1,34 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <base target="_top">
-  <title>塾ポータル（入口）</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
-    .loader { border: 3px solid #f3f3f3; border-top: 3px solid #4f46e5; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-  </style>
-</head>
-<body class="h-screen flex items-center justify-center p-4">
+const SPREADSHEET_ID = '10xMlixR0oK0qcjzmQBUNLHCQbFecPLF5SqOkg1LqCc0';
+const SETTING_SHEET_NAME = '⚙️ システム設定';
 
-  <div id="loading-view" class="text-center">
-    <div class="loader mx-auto mb-4"></div>
-    <p class="text-slate-500 font-bold text-sm">システム状態を確認中...</p>
-  </div>
+function doGet(e) {
+  // パラメータが存在する場合、または外部（GitHub等）からのデータ要求（Fetch）の場合はJSONを返却する
+  if (e && (e.parameter.dataType === 'json' || Object.keys(e.parameter).length > 0)) {
+    const settings = getSystemSettings();
+    return ContentService.createTextOutput(JSON.stringify(settings))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 
-  <div id="maintenance-view" class="hidden max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-slate-200">
-    <div class="text-5xl mb-4">🚧</div>
-    <h1 class="text-2xl font-bold text-slate-800 mb-2">メンテナンス中</h1>
-    <p class="text-slate-600 mb-6 text-sm">現在、システムメンテナンスを行っております。<br>ご不便をおかけしますが、終了まで今しばらくお待ちください。</p>
-    <div class="bg-slate-50 p-4 rounded-xl mb-2">
-      <p class="text-xs text-slate-500 font-bold mb-1">終了予定</p>
-      <p id="end-time" class="text-slate-800 font-bold"></p>
-    </div>
-  </div>
+  // 通常通りブラウザで直接開かれた場合はHTML画面を表示する
+  return HtmlService.createTemplateFromFile('index')
+    .evaluate()
+    .setTitle('塾ポータル（入口）')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
 
-  <!-- 追加: 自動遷移の代わりに、クリックして入る画面を追加（既存のデザインに統一） -->
-  <div id="entrance-view" class="hidden max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-slate-200">
-    <div class="text-5xl mb-4">🎓</div>
-    <h1 class="text-2xl font-bold text-slate-800 mb-6">塾専用ポータルサイト</h1>
-    <a id="enter-btn" href="#" target="_top" class="inline-block bg-[#4f46e5] hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-xl transition-colors">
-      ログイン
-    </a>
-  </div>
+function getSystemSettings() {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(SETTING_SHEET_NAME);
+    if (!sheet) throw new Error('設定シートが見つかりません');
 
-  <script>
-    window.onload = function() {
-      google.script.run
-        .withSuccessHandler(function(settings) {
-          document.getElementById('loading-view').classList.add('hidden');
-          
-          if (settings.isMaintenance) {
-            // メンテナンスモードがONの場合
-            document.getElementById('end-time').textContent = settings.maintenanceEndTime || '未定';
-            document.getElementById('maintenance-view').classList.remove('hidden');
-          } else {
-            // 通常時：自動リダイレクトではなく、リンクボタンを表示する
-            if(settings.mainAppUrl) {
-              document.getElementById('enter-btn').href = settings.mainAppUrl;
-              document.getElementById('entrance-view').classList.remove('hidden');
-            } else {
-              document.getElementById('maintenance-view').innerHTML = '<h1 class="text-xl font-bold text-rose-600">本体アプリのURLが設定されていません</h1>';
-              document.getElementById('maintenance-view').classList.remove('hidden');
-            }
-          }
-        })
-        .getSystemSettings();
+    return {
+      isMaintenance: sheet.getRange('A2').getValue() === 'ON',
+      maintenanceEndTime: sheet.getRange('B2').getValue() ? sheet.getRange('B2').getValue().toString() : '未定',
+      mainAppUrl: sheet.getRange('C2').getValue()
     };
-  </script>
-</body>
-</html>
+  } catch (error) {
+    return { isMaintenance: true, maintenanceEndTime: '未定 (システムエラー)', mainAppUrl: '' };
+  }
+}
